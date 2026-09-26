@@ -25,6 +25,11 @@ class HorizonWorkerStatsServiceProvider extends ServiceProvider
     public const ORIGINAL_NAMESPACE = 'horizon-worker-stats-original';
 
     /**
+     * The middleware group the package's routes run through.
+     */
+    public const MIDDLEWARE_GROUP = 'horizon-worker-stats';
+
+    /**
      * Register the package's services.
      *
      * @return void
@@ -81,6 +86,8 @@ class HorizonWorkerStatsServiceProvider extends ServiceProvider
         // own view namespace in its boot(), and the override has to find that
         // namespace in order to alias it and render the real layout from it.
         $this->app->booted(function () {
+            $this->registerMiddlewareGroup();
+
             $this->callAfterResolving('view', fn ($view) => $this->registerViewOverride($view));
         });
     }
@@ -103,27 +110,38 @@ class HorizonWorkerStatsServiceProvider extends ServiceProvider
         Route::group([
             'domain' => config('horizon.domain', null),
             'prefix' => config('horizon.path'),
-            'middleware' => $this->middleware(),
+            'middleware' => self::MIDDLEWARE_GROUP,
         ], function () {
             $this->loadRoutesFrom(__DIR__.'/../routes/worker-stats.php');
         });
     }
 
     /**
-     * The middleware stack these routes run through.
+     * Define the middleware group these routes run through.
      *
-     * This mirrors what a Horizon route gets: the dashboard's configured
-     * middleware from the route group, and the Authenticate middleware Horizon
-     * applies through its base controller.
+     * Horizon 5.45 and later put their routes behind a "horizon" group that
+     * adds Sentinel's authorization ahead of the configured middleware, so
+     * that group is used whenever Horizon defines it; older releases route
+     * through the configured middleware alone. Either way the Authenticate
+     * middleware Horizon applies through its base controller comes after.
      *
-     * @return array<int, string>
+     * This runs once every provider has booted, as Horizon defines its group
+     * in its own boot(); the routes only name the group, which the router
+     * resolves per request.
+     *
+     * @return void
      */
-    protected function middleware()
+    protected function registerMiddlewareGroup()
     {
-        return array_values(array_unique(array_merge(
-            (array) config('horizon.middleware', 'web'),
-            [Authenticate::class]
-        )));
+        $router = $this->app['router'];
+
+        $horizon = $router->hasMiddlewareGroup('horizon')
+            ? ['horizon']
+            : (array) config('horizon.middleware', 'web');
+
+        $router->middlewareGroup(self::MIDDLEWARE_GROUP, array_values(array_unique(array_merge(
+            $horizon, [Authenticate::class]
+        ))));
     }
 
     /**

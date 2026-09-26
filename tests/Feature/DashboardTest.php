@@ -50,6 +50,18 @@ class DashboardTest extends TestCase
         $this->assertStringContainsString('/horizon/api/worker-stats', str_replace('\\', '', $html));
     }
 
+    public function test_urls_on_a_dashboard_domain_keep_the_request_scheme()
+    {
+        config(['horizon.domain' => 'horizon.test']);
+
+        $decorated = str_replace('\\', '', app(LayoutDecorator::class)->decorate(
+            '<html><body><div id="horizon"></div></body></html>'
+        ));
+
+        $this->assertStringContainsString('http://horizon.test/horizon/api/worker-stats', $decorated);
+        $this->assertStringNotContainsString('https://horizon.test', $decorated);
+    }
+
     public function test_the_package_path_renders_the_dashboard_shell()
     {
         // Horizon's own catch-all serves the SPA for this path, which is what

@@ -202,7 +202,7 @@ class LayoutDecorator
         $path = trim((string) $this->config->get('horizon.path', 'horizon'), '/');
 
         if ($domain = $this->config->get('horizon.domain')) {
-            return rtrim('https://'.trim((string) $domain, '/').'/'.$path, '/');
+            return rtrim(url()->formatScheme().trim((string) $domain, '/').'/'.$path, '/');
         }
 
         return rtrim(url($path), '/');

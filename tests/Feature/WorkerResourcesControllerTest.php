@@ -5,7 +5,10 @@ namespace BoringO11y\HorizonWorkerStats\Tests\Feature;
 use BoringO11y\HorizonWorkerStats\Contracts\WorkerResourcesRepository;
 use BoringO11y\HorizonWorkerStats\Tests\TestCase;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Route;
 use Laravel\Horizon\Horizon;
+use Laravel\Horizon\Http\Middleware\Authenticate;
+use Laravel\Sentinel\Http\Middleware\SentinelMiddleware;
 
 class WorkerResourcesControllerTest extends TestCase
 {
@@ -41,5 +44,20 @@ class WorkerResourcesControllerTest extends TestCase
         Horizon::auth(fn () => false);
 
         $this->getJson('/horizon/api/worker-stats')->assertForbidden();
+    }
+
+    public function test_the_endpoint_runs_through_horizons_own_middleware_group()
+    {
+        $route = Route::getRoutes()->getByName('horizon-worker-stats.index');
+
+        $middleware = app('router')->gatherRouteMiddleware($route);
+
+        // Horizon's group is what adds Sentinel ahead of the configured
+        // middleware; only releases that define it can be expected to apply it.
+        if (app('router')->hasMiddlewareGroup('horizon')) {
+            $this->assertContains(SentinelMiddleware::class.':horizon', $middleware);
+        }
+
+        $this->assertContains(Authenticate::class, $middleware);
     }
 }
