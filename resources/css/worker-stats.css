@@ -1,0 +1,47 @@
+/*
+ * The page borrows Horizon's own Bootstrap classes for everything structural,
+ * so this only covers the charts and keeping the injected mount out of the
+ * layout when it is empty. Colours come from Bootstrap's variables so the
+ * charts follow Horizon's light and dark themes.
+ */
+#hws-page:empty {
+    display: none;
+}
+
+#hws-page .hws-chart-container {
+    position: relative;
+}
+
+#hws-page .hws-chart {
+    display: block;
+    width: 100%;
+    overflow: visible;
+}
+
+#hws-page .hws-grid {
+    stroke: var(--bs-border-color, #dee2e6);
+    stroke-width: 1;
+}
+
+#hws-page .hws-axis {
+    fill: var(--bs-secondary-color, #6c757d);
+    font-size: 11px;
+}
+
+#hws-page .hws-cursor {
+    stroke: var(--bs-secondary-color, #6c757d);
+    stroke-dasharray: 3 3;
+}
+
+#hws-page .hws-tooltip {
+    position: absolute;
+    top: 8px;
+    padding: 6px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+    pointer-events: none;
+    background: var(--bs-body-bg, #fff);
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
