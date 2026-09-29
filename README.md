@@ -4,12 +4,7 @@ A **Worker Stats** page for the Laravel Horizon dashboard: how much memory and C
 
 Horizon tells you how many jobs your workers get through and how long they wait. It does not tell you what running them costs. This adds two charts: the resident memory of every `horizon:work` process on every machine, summed, and the CPU cores they keep busy.
 
-```
-Worker Memory — Last 24 Hours                  Now: 1.55 GB    Worker CPU — Last 24 Hours           Now: 1.23 cores
- 2 GB ┤                          ╭──╮  ╭────                     2 cores ┤              ╭╮
-1.5 GB┤              ╭───────────╯  ╰──╯                         1.5     ┤    ╭──╮╭─────╯╰──────
- 1 GB ┤    ╭─────────╯                                           1       ┤╭───╯  ╰╯
-```
+![Worker Stats page in the Horizon dashboard](art/worker-stats.png)
 
 ## Install
 
