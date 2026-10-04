@@ -6,8 +6,9 @@ use BoringO11y\HorizonWorkerStats\Contracts\WorkerResourcesRepository;
 use BoringO11y\HorizonWorkerStats\Listeners\RecordWorkerResources;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Redis\Factory as RedisFactory;
-use Illuminate\Redis\Connections\Connection;
 use Illuminate\Redis\Connections\PhpRedisClusterConnection;
+use Illuminate\Redis\Connections\PhpRedisConnection;
+use Illuminate\Redis\Connections\PredisConnection;
 
 class RedisWorkerResourcesRepository implements WorkerResourcesRepository
 {
@@ -365,10 +366,11 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
      * Horizon's own connection, so the history lives under Horizon's prefix
      * beside the rest of the dashboard's data.
      *
-     * @return Connection
+     * @return PhpRedisConnection|PredisConnection
      */
     public function connection()
     {
+        /** @var PhpRedisConnection|PredisConnection */
         return $this->redis->connection('horizon');
     }
 }

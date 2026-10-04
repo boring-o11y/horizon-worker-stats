@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\View\Factory;
+use Illuminate\View\FileViewFinder;
 use Laravel\Horizon\Events\SupervisorLooped;
 use Laravel\Horizon\Http\Middleware\Authenticate;
 
@@ -158,6 +159,7 @@ class HorizonWorkerStatsServiceProvider extends ServiceProvider
      */
     protected function registerViewOverride($view)
     {
+        /** @var FileViewFinder $finder */
         $finder = $view->getFinder();
         $hints = $finder->getHints();
 

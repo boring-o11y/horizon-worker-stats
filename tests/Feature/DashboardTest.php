@@ -5,6 +5,7 @@ namespace BoringO11y\HorizonWorkerStats\Tests\Feature;
 use BoringO11y\HorizonWorkerStats\LayoutDecorator;
 use BoringO11y\HorizonWorkerStats\Tests\TestCase;
 use Illuminate\Support\Facades\Log;
+use Illuminate\View\FileViewFinder;
 
 class DashboardTest extends TestCase
 {
@@ -75,6 +76,7 @@ class DashboardTest extends TestCase
     {
         // Another add-on booting after this one aliases whatever "horizon"
         // resolves to by then (this package's override) and prepends its own.
+        /** @var FileViewFinder $finder */
         $finder = app('view')->getFinder();
         $finder->addNamespace('other-addon-original', $finder->getHints()['horizon']);
         $finder->prependNamespace('horizon', __DIR__.'/../Fixtures/other-addon');
@@ -88,7 +90,7 @@ class DashboardTest extends TestCase
 
     public function test_a_missing_anchor_is_skipped_rather_than_fatal()
     {
-        Log::spy();
+        $log = Log::spy();
 
         $decorated = app(LayoutDecorator::class)->decorate(
             '<html><body><div id="horizon">Horizon moved its markup</div></body></html>'
@@ -99,6 +101,6 @@ class DashboardTest extends TestCase
         $this->assertStringNotContainsString('<div id="hws-page"></div>', $decorated);
         $this->assertStringNotContainsString('data-hws-nav>', $decorated);
 
-        Log::shouldHaveReceived('warning')->twice();
+        $log->shouldHaveReceived('warning')->twice();
     }
 }
