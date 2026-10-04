@@ -156,6 +156,78 @@ class WorkerResourcesTest extends TestCase
         $this->assertSameSize($trends['labels'], $trends['memory']);
     }
 
+    public function test_the_history_is_broken_down_by_supervisor_across_machines()
+    {
+        $resources = resolve(WorkerResourcesRepository::class);
+
+        $resources->record('host-1-abcd:emails', $this->bucket, $this->bucket + 900, 100 * 1048576, 900);
+        $resources->record('host-2-efgh:emails', $this->bucket, $this->bucket + 900, 50 * 1048576, 450);
+        $resources->record('host-1-abcd:reports', $this->bucket, $this->bucket + 900, 300 * 1048576, 1800);
+
+        $trends = $resources->trends();
+        $index = array_search($this->bucket, $trends['labels'], true);
+        $supervisors = array_column($trends['supervisors'], null, 'name');
+
+        $this->assertSame(['emails', 'reports'], array_column($trends['supervisors'], 'name'));
+        $this->assertSame(150 * 1048576, $supervisors['emails']['memory'][$index]);
+        $this->assertSame(1.5, $supervisors['emails']['cpu'][$index]);
+        $this->assertSame(300 * 1048576, $supervisors['reports']['memory'][$index]);
+        $this->assertSame(2.0, $supervisors['reports']['cpu'][$index]);
+
+        $this->assertSame(450 * 1048576, $trends['memory'][$index]);
+        $this->assertSame(3.5, $trends['cpu'][$index]);
+    }
+
+    public function test_a_restarted_supervisor_keeps_one_series()
+    {
+        $resources = resolve(WorkerResourcesRepository::class);
+
+        // Horizon was restarted half way through the bucket, which gives the
+        // master, and so every supervisor under it, a new name.
+        $resources->record('host-abcd:emails', $this->bucket, $this->bucket + 450, 100 * 1048576, 450);
+        $resources->record('host-wxyz:emails', $this->bucket + 450, $this->bucket + 900, 100 * 1048576, 450);
+
+        $trends = $resources->trends();
+        $index = array_search($this->bucket, $trends['labels'], true);
+
+        $this->assertCount(1, $trends['supervisors']);
+        $this->assertSame(100 * 1048576, $trends['supervisors'][0]['memory'][$index]);
+        $this->assertSame(1.0, $trends['supervisors'][0]['cpu'][$index]);
+    }
+
+    public function test_a_master_name_holding_a_colon_still_groups_by_supervisor()
+    {
+        $resources = resolve(WorkerResourcesRepository::class);
+
+        // A custom MasterSupervisor::determineNameUsing() resolver may put a
+        // colon in the master's part of the name.
+        $resources->record('app:prod-abcd:emails', $this->bucket, $this->bucket + 450, 100 * 1048576, 450);
+        $resources->record('app:prod-wxyz:emails', $this->bucket + 450, $this->bucket + 900, 100 * 1048576, 450);
+
+        $this->assertSame(['emails'], array_column(resolve(WorkerResourcesRepository::class)->trends()['supervisors'], 'name'));
+    }
+
+    public function test_a_supervisor_missing_from_a_sampled_bucket_is_zero_rather_than_null()
+    {
+        $resources = resolve(WorkerResourcesRepository::class);
+
+        $resources->record('host:emails', $this->bucket - 900, $this->bucket, 100 * 1048576, 900);
+        $resources->record('host:emails', $this->bucket, $this->bucket + 900, 100 * 1048576, 900);
+        $resources->record('host:reports', $this->bucket, $this->bucket + 900, 100 * 1048576, 900);
+
+        $trends = $resources->trends();
+        $index = array_search($this->bucket, $trends['labels'], true);
+        $reports = array_column($trends['supervisors'], null, 'name')['reports'];
+
+        // Not deployed yet while the other supervisor was sampled...
+        $this->assertSame(0, $reports['memory'][$index - 1]);
+        $this->assertSame(0.0, $reports['cpu'][$index - 1]);
+
+        // ...which is not the same as a bucket nobody measured.
+        $this->assertNull($reports['memory'][$index - 2]);
+        $this->assertSameSize($trends['labels'], $reports['memory']);
+    }
+
     public function test_clearing_removes_the_history()
     {
         $resources = resolve(WorkerResourcesRepository::class);

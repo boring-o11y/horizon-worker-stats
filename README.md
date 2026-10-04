@@ -2,7 +2,7 @@
 
 A **Worker Stats** page for the Laravel Horizon dashboard: how much memory and CPU your whole worker fleet is using, over the last 24 hours.
 
-Horizon tells you how many jobs your workers get through and how long they wait. It does not tell you what running them costs. This adds two charts: the resident memory of every `horizon:work` process on every machine, summed, and the CPU cores they keep busy.
+Horizon tells you how many jobs your workers get through and how long they wait. It does not tell you what running them costs. This adds two charts: the resident memory of every `horizon:work` process on every machine, summed, and the CPU cores they keep busy — each stacked by supervisor, so you can see which of them is using it.
 
 ![Worker Stats page in the Horizon dashboard](art/worker-stats.png)
 
@@ -40,6 +40,8 @@ Each pair of samples becomes one span. Memory is the average of the two totals; 
 Every supervisor on every machine writes into the same bucket hashes, one field set per supervisor: byte-seconds, CPU-seconds, seconds actually covered, and the first and last instant it sampled. All of it goes in with a single Lua call, and a span that crosses a bucket boundary is split between the two in proportion.
 
 When the page reads a bucket, each supervisor is averaged **over its own covered seconds** and then weighted by the part of the bucket it was running for. Dividing one fleet-wide sum by one fleet-wide span is wrong both ways: supervisors sample out of step, so the in-progress bucket would dip at the right edge while most of them have not yet written their latest span; and a supervisor restart would leave a gap that read as zero use. The weighting also means a machine removed half way through a bucket only counts for the half it ran.
+
+The breakdown groups supervisors by the name in your Horizon config (`emails`, `reports`, …), not by the full `host-XXXX:emails` name Horizon gives them: that part changes every time Horizon restarts. So one supervisor keeps one band across deploys and across machines. A supervisor absent from a bucket other supervisors sampled counts as zero there, so the bands always add up to the total. Past eight supervisors, the rest fold into one "Other" band.
 
 Memory is RSS, which counts shared pages in every process that maps them, so a sum across workers slightly overstates what the machines are actually holding.
 

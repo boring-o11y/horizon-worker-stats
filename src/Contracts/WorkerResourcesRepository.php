@@ -22,9 +22,10 @@ interface WorkerResourcesRepository
     /**
      * Get the average memory and CPU cores in use across the retention window.
      *
-     * A bucket nothing was sampled in is null rather than zero.
+     * A bucket nothing was sampled in is null rather than zero. The same
+     * history is also broken down by supervisor name, across every machine.
      *
-     * @return array{labels: array<int, int>, memory: array<int, int|null>, cpu: array<int, float|null>}
+     * @return array{labels: array<int, int>, memory: array<int, int|null>, cpu: array<int, float|null>, supervisors: array<int, array{name: string, memory: array<int, int|null>, cpu: array<int, float|null>}>}
      */
     public function trends();
 

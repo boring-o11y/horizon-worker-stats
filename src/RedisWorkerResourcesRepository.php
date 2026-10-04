@@ -91,7 +91,7 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
     /**
      * Get the average memory and CPU cores in use across the retention window.
      *
-     * @return array{labels: array<int, int>, memory: array<int, int|null>, cpu: array<int, float|null>}
+     * @return array{labels: array<int, int>, memory: array<int, int|null>, cpu: array<int, float|null>, supervisors: array<int, array{name: string, memory: array<int, int|null>, cpu: array<int, float|null>}>}
      */
     public function trends()
     {
@@ -105,6 +105,7 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
 
         $memory = [];
         $cpu = [];
+        $groups = [];
 
         foreach ($buckets as $i => $bucket) {
             $supervisors = $this->supervisors((array) ($raw[$i] ?? []));
@@ -123,7 +124,7 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
             $bytes = 0.0;
             $cores = 0.0;
 
-            foreach ($supervisors as $supervisor) {
+            foreach ($supervisors as $name => $supervisor) {
                 // Each supervisor is averaged over the seconds it sampled, then
                 // weighted by how much of the bucket it was running for. A gap
                 // between its samples is a stretch nobody measured, not a
@@ -132,13 +133,70 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
 
                 $bytes += $supervisor['memory'] * $share;
                 $cores += $supervisor['cpu'] * $share;
+
+                $group = $this->group($name);
+                $groups[$group][$i]['memory'] = ($groups[$group][$i]['memory'] ?? 0.0) + $supervisor['memory'] * $share;
+                $groups[$group][$i]['cpu'] = ($groups[$group][$i]['cpu'] ?? 0.0) + $supervisor['cpu'] * $share;
             }
 
             $memory[] = (int) round($bytes);
             $cpu[] = round($cores, 3);
         }
 
-        return ['labels' => $buckets, 'memory' => $memory, 'cpu' => $cpu];
+        ksort($groups);
+
+        return [
+            'labels' => $buckets,
+            'memory' => $memory,
+            'cpu' => $cpu,
+            'supervisors' => array_map(fn ($name) => [
+                'name' => (string) $name,
+                'memory' => $this->groupSeries($groups[$name], $memory, 'memory', fn ($value) => (int) round($value)),
+                'cpu' => $this->groupSeries($groups[$name], $cpu, 'cpu', fn ($value) => round($value, 3)),
+            ], array_keys($groups)),
+        ];
+    }
+
+    /**
+     * Get the supervisor a recorded name belongs to, across machines and restarts.
+     *
+     * Horizon names a supervisor after its master, "{host}-{random}:{name}",
+     * and the master's part changes every time Horizon starts. Only the name
+     * from the configuration stays put, so that is what the history is kept by.
+     * It is taken after the last colon, as a custom master name may hold one.
+     *
+     * @param  string  $supervisor
+     * @return string
+     */
+    protected function group($supervisor)
+    {
+        return ($separator = strrpos($supervisor, ':')) !== false
+            ? substr($supervisor, $separator + 1)
+            : $supervisor;
+    }
+
+    /**
+     * Line one supervisor's values up with the buckets of the total.
+     *
+     * A bucket nothing sampled stays null. One that other supervisors sampled
+     * but this one did not is zero: it had no workers running there, and the
+     * breakdown still adds up to the total.
+     *
+     * @param  array<int, array{memory: float, cpu: float}>  $values
+     * @param  array<int, int|float|null>  $total
+     * @param  string  $metric
+     * @param  callable  $round
+     * @return array<int, int|float|null>
+     */
+    protected function groupSeries(array $values, array $total, $metric, callable $round)
+    {
+        $series = [];
+
+        foreach ($total as $i => $value) {
+            $series[] = $value === null ? null : $round($values[$i][$metric] ?? 0.0);
+        }
+
+        return $series;
     }
 
     /**
