@@ -9,6 +9,7 @@ use Illuminate\Contracts\Foundation\CachesRoutes;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\View\Factory;
 use Laravel\Horizon\Events\SupervisorLooped;
 use Laravel\Horizon\Http\Middleware\Authenticate;
 
@@ -152,7 +153,7 @@ class HorizonWorkerStatsServiceProvider extends ServiceProvider
      * the real layout instead of a copy that would need re-syncing on every
      * Horizon release.
      *
-     * @param  \Illuminate\View\Factory  $view
+     * @param  Factory  $view
      * @return void
      */
     protected function registerViewOverride($view)

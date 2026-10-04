@@ -14,6 +14,7 @@ use Laravel\Horizon\Supervisor;
 use Laravel\Horizon\SupervisorOptions;
 use Laravel\Horizon\WorkerProcess;
 use Mockery;
+use Mockery\MockInterface;
 use RuntimeException;
 use Symfony\Component\Process\Process;
 
@@ -347,8 +348,7 @@ class WorkerResourcesTest extends TestCase
         $supervisor = new Supervisor(new SupervisorOptions(MasterSupervisor::name().':resources', 'redis'));
 
         $process = new WorkerProcess(Process::fromShellCommandline('exec sleep 30'));
-        $process->start(function () {
-        });
+        $process->start(function () {});
 
         $supervisor->processPools->first()->processes[] = $process;
 
@@ -405,7 +405,7 @@ class WorkerResourcesTest extends TestCase
      * Build a listener whose supervisor reports the given worker pids.
      *
      * @param  array<int, int>  $pids
-     * @return array{0: \BoringO11y\HorizonWorkerStats\Listeners\RecordWorkerResources, 1: \Mockery\MockInterface}
+     * @return array{0: RecordWorkerResources, 1: MockInterface}
      */
     protected function listener(array $pids)
     {
@@ -430,7 +430,7 @@ class WorkerResourcesTest extends TestCase
     /**
      * Build a loop event for a supervisor.
      *
-     * @return \Laravel\Horizon\Events\SupervisorLooped
+     * @return SupervisorLooped
      */
     protected function looped()
     {

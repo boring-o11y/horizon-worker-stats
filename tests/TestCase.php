@@ -4,6 +4,7 @@ namespace BoringO11y\HorizonWorkerStats\Tests;
 
 use BoringO11y\HorizonWorkerStats\HorizonWorkerStatsServiceProvider;
 use Illuminate\Support\Facades\Redis;
+use Laravel\Horizon\Horizon;
 use Laravel\Horizon\HorizonServiceProvider;
 use Orchestra\Testbench\TestCase as BaseTestCase;
 
@@ -36,8 +37,6 @@ abstract class TestCase extends BaseTestCase
 
     /**
      * Flush both the default connection and the one Horizon writes through.
-     *
-     * @return void
      */
     protected function flushRedis(): void
     {
@@ -80,7 +79,7 @@ abstract class TestCase extends BaseTestCase
         // The dashboard's own gate is the local-environment default, which the
         // testing environment does not satisfy, so it is opened explicitly for
         // the tests that go through the routes.
-        \Laravel\Horizon\Horizon::auth(fn () => true);
+        Horizon::auth(fn () => true);
 
         foreach ($this->overrides as $key => $value) {
             $app['config']->set($key, $value);

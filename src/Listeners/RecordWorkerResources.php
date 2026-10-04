@@ -36,14 +36,14 @@ class RecordWorkerResources
     /**
      * The process resources implementation.
      *
-     * @var \BoringO11y\HorizonWorkerStats\ProcessResources
+     * @var ProcessResources
      */
     public $processes;
 
     /**
      * The worker resources repository implementation.
      *
-     * @var \BoringO11y\HorizonWorkerStats\Contracts\WorkerResourcesRepository
+     * @var WorkerResourcesRepository
      */
     public $resources;
 
@@ -67,8 +67,6 @@ class RecordWorkerResources
     /**
      * Create a new listener instance.
      *
-     * @param  \BoringO11y\HorizonWorkerStats\ProcessResources  $processes
-     * @param  \BoringO11y\HorizonWorkerStats\Contracts\WorkerResourcesRepository  $resources
      * @return void
      */
     public function __construct(ProcessResources $processes, WorkerResourcesRepository $resources)
@@ -80,7 +78,6 @@ class RecordWorkerResources
     /**
      * Handle the event.
      *
-     * @param  \Laravel\Horizon\Events\SupervisorLooped  $event
      * @return void
      */
     public function handle(SupervisorLooped $event)
@@ -143,7 +140,6 @@ class RecordWorkerResources
      * The pid is read off the Symfony process, which only reports one while
      * the process runs. That is exactly the set wanted here.
      *
-     * @param  \Laravel\Horizon\Supervisor  $supervisor
      * @return array<int, int>
      */
     protected function pids(Supervisor $supervisor)

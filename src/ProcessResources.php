@@ -18,14 +18,13 @@ class ProcessResources
     /**
      * The exec implementation.
      *
-     * @var \BoringO11y\HorizonWorkerStats\Exec
+     * @var Exec
      */
     public $exec;
 
     /**
      * Create a new process resources instance.
      *
-     * @param  \BoringO11y\HorizonWorkerStats\Exec  $exec
      * @return void
      */
     public function __construct(Exec $exec)

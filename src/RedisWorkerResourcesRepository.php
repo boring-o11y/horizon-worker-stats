@@ -6,6 +6,7 @@ use BoringO11y\HorizonWorkerStats\Contracts\WorkerResourcesRepository;
 use BoringO11y\HorizonWorkerStats\Listeners\RecordWorkerResources;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Redis\Factory as RedisFactory;
+use Illuminate\Redis\Connections\Connection;
 use Illuminate\Redis\Connections\PhpRedisClusterConnection;
 
 class RedisWorkerResourcesRepository implements WorkerResourcesRepository
@@ -13,7 +14,7 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
     /**
      * The Redis connection instance.
      *
-     * @var \Illuminate\Contracts\Redis\Factory
+     * @var RedisFactory
      */
     public $redis;
 
@@ -34,7 +35,6 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
     /**
      * Create a new repository instance.
      *
-     * @param  \Illuminate\Contracts\Redis\Factory  $redis
      * @return void
      */
     public function __construct(RedisFactory $redis)
@@ -185,7 +185,6 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
      * @param  array<int, array{memory: float, cpu: float}>  $values
      * @param  array<int, int|float|null>  $total
      * @param  string  $metric
-     * @param  callable  $round
      * @return array<int, int|float|null>
      */
     protected function groupSeries(array $values, array $total, $metric, callable $round)
@@ -347,7 +346,6 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
      * phpredis cannot pipeline across a cluster. Every key here carries
      * Horizon's hash-tagged prefix, so a transaction stays on one node.
      *
-     * @param  callable  $callback
      * @return array
      */
     protected function pipeline(callable $callback)
@@ -367,7 +365,7 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
      * Horizon's own connection, so the history lives under Horizon's prefix
      * beside the rest of the dashboard's data.
      *
-     * @return \Illuminate\Redis\Connections\Connection
+     * @return Connection
      */
     public function connection()
     {

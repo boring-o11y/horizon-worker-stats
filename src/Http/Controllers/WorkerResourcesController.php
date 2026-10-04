@@ -6,9 +6,7 @@ use BoringO11y\HorizonWorkerStats\Contracts\WorkerResourcesRepository;
 
 class WorkerResourcesController
 {
-    public function __construct(protected WorkerResourcesRepository $resources)
-    {
-    }
+    public function __construct(protected WorkerResourcesRepository $resources) {}
 
     /**
      * Get the worker memory and CPU history for the retention window.

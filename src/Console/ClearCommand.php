@@ -27,7 +27,6 @@ class ClearCommand extends Command
      * Deliberately not gated on the enabled flag: clearing has to be able to
      * clean up what a period with the package on left behind.
      *
-     * @param  \BoringO11y\HorizonWorkerStats\Contracts\WorkerResourcesRepository  $resources
      * @return int
      */
     public function handle(WorkerResourcesRepository $resources)

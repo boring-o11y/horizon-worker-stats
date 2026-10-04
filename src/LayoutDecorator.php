@@ -44,15 +44,10 @@ class LayoutDecorator
 
     protected const BODY_ANCHOR = '</body>';
 
-    public function __construct(protected Config $config)
-    {
-    }
+    public function __construct(protected Config $config) {}
 
     /**
      * Splice this package's additions into the rendered layout.
-     *
-     * @param  string  $html
-     * @return string
      */
     public function decorate(string $html): string
     {
@@ -64,9 +59,6 @@ class LayoutDecorator
 
     /**
      * Add the page's mount point after Horizon's router outlet.
-     *
-     * @param  string  $html
-     * @return string
      */
     protected function injectMount(string $html): string
     {
@@ -84,9 +76,6 @@ class LayoutDecorator
      * It has to be a plain anchor. The nav is inside #horizon, so Vue compiles
      * whatever is placed there, and a <router-link> to a route the compiled
      * bundle has never heard of resolves to nothing. A real href navigates.
-     *
-     * @param  string  $html
-     * @return string
      */
     protected function injectNavItem(string $html): string
     {
@@ -112,9 +101,6 @@ class LayoutDecorator
 
     /**
      * Add the styles and script before the closing body tag.
-     *
-     * @param  string  $html
-     * @return string
      */
     protected function injectAssets(string $html): string
     {
@@ -137,8 +123,6 @@ class LayoutDecorator
 
     /**
      * Build the sidebar link, mirroring the markup of Horizon's own items.
-     *
-     * @return string
      */
     protected function navItem(): string
     {
@@ -184,8 +168,6 @@ class LayoutDecorator
 
     /**
      * The absolute URL of this package's page.
-     *
-     * @return string
      */
     protected function pageUrl(): string
     {
@@ -194,8 +176,6 @@ class LayoutDecorator
 
     /**
      * The absolute URL of the Horizon dashboard itself.
-     *
-     * @return string
      */
     protected function dashboardUrl(): string
     {
@@ -208,9 +188,6 @@ class LayoutDecorator
         return rtrim(url($path), '/');
     }
 
-    /**
-     * @return string
-     */
     protected function label(): string
     {
         return (string) $this->config->get('horizon-worker-stats.label', 'Worker Stats');
@@ -218,9 +195,6 @@ class LayoutDecorator
 
     /**
      * Read one of this package's built assets.
-     *
-     * @param  string  $path
-     * @return string
      */
     protected function asset(string $path): string
     {
@@ -234,14 +208,6 @@ class LayoutDecorator
      *
      * $from is where to start looking, which is how one anchor is located
      * relative to an earlier one.
-     *
-     * @param  string  $html
-     * @param  string  $anchor
-     * @param  string  $insert
-     * @param  string  $missing
-     * @param  bool  $before
-     * @param  int  $from
-     * @return string
      */
     protected function patch(
         string $html,
@@ -262,11 +228,6 @@ class LayoutDecorator
         return substr_replace($html, $insert, $before ? $position : $position + strlen($anchor), 0);
     }
 
-    /**
-     * @param  string  $anchor
-     * @param  string  $missing
-     * @return void
-     */
     protected function warn(string $anchor, string $missing): void
     {
         Log::warning(
