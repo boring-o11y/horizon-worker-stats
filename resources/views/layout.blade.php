@@ -8,12 +8,8 @@
 
     Whatever data Horizon's HomeController passed is forwarded verbatim, so a
     Horizon release that adds a variable to its layout keeps working here.
+    $__data is the array the view engine renders this template with.
 --}}
-@php
-    $__hwsData = collect(get_defined_vars())
-        ->reject(fn ($value, $key) => str_starts_with($key, '__') || in_array($key, ['app', 'errors', 'obLevel'], true))
-        ->all();
-@endphp
 {!! app(\BoringO11y\HorizonWorkerStats\LayoutDecorator::class)->decorate(
-    view(\BoringO11y\HorizonWorkerStats\HorizonWorkerStatsServiceProvider::ORIGINAL_NAMESPACE.'::layout', $__hwsData)->render()
+    view(\BoringO11y\HorizonWorkerStats\HorizonWorkerStatsServiceProvider::ORIGINAL_NAMESPACE.'::layout', $__data)->render()
 ) !!}

@@ -36,7 +36,6 @@
     };
 
     let pollTimer = null;
-    let mounted = false;
 
     /* ------------------------------------------------------------- helpers */
 
@@ -71,6 +70,14 @@
         const factor = Math.pow(10, places);
 
         return Math.round(value * factor) / factor;
+    }
+
+    function formatValue(value, unit) {
+        return round(value, 2) + ' ' + unit;
+    }
+
+    function swatch(color) {
+        return '<span class="hws-swatch" style="background:' + color + '"></span>';
     }
 
     function latest(values) {
@@ -140,12 +147,17 @@
 
         const total = (supervisor, key) => supervisor[key].reduce((sum, value) => sum + (value || 0), 0);
         const fleet = (key) => supervisors.reduce((sum, supervisor) => sum + total(supervisor, key), 0) || 1;
-        const share = (supervisor) => total(supervisor, 'memory') / fleet('memory') + total(supervisor, 'cpu') / fleet('cpu');
+        const memory = fleet('memory');
+        const cpu = fleet('cpu');
+        const shares = new Map(supervisors.map((supervisor) => [
+            supervisor.name,
+            total(supervisor, 'memory') / memory + total(supervisor, 'cpu') / cpu,
+        ]));
 
-        const ranked = supervisors.slice().sort((a, b) => share(b) - share(a));
-        const shown = ranked.slice(0, colors.length - 1).map((supervisor) => supervisor.name);
-        const kept = supervisors.filter((supervisor) => shown.includes(supervisor.name));
-        const rest = supervisors.filter((supervisor) => !shown.includes(supervisor.name));
+        const ranked = supervisors.slice().sort((a, b) => shares.get(b.name) - shares.get(a.name));
+        const shown = new Set(ranked.slice(0, colors.length - 1).map((supervisor) => supervisor.name));
+        const kept = supervisors.filter((supervisor) => shown.has(supervisor.name));
+        const rest = supervisors.filter((supervisor) => !shown.has(supervisor.name));
         const sum = (key) => rest[0][key].map((value, i) => value === null
             ? null
             : rest.reduce((total, supervisor) => total + (supervisor[key][i] || 0), 0));
@@ -168,19 +180,15 @@
     function series() {
         const data = state.data || {};
         const labels = data.labels || [];
-        // A repository that predates the breakdown still gets its total drawn.
-        const supervisors = layers(data.supervisors && data.supervisors.length
-            ? data.supervisors
-            : [{name: 'All workers', memory: data.memory || [], cpu: data.cpu || []}]);
+        const supervisors = layers(data.supervisors || []);
 
-        const megabytes = (value) => value === null ? null : value / BYTES_IN_MB;
-        const useGigabytes = Math.max(0, ...(data.memory || []).map(megabytes).filter((value) => value !== null)) >= 1024;
+        const useGigabytes = Math.max(0, ...(data.memory || []).filter((value) => value !== null)) / BYTES_IN_MB >= 1024;
+        const scale = BYTES_IN_MB * (useGigabytes ? 1024 : 1);
         // Kept unrounded, so the bands stack to exactly the total. Only the
         // numbers shown as text are rounded.
-        const toMemory = (value) => value === null ? null : (useGigabytes ? megabytes(value) / 1024 : megabytes(value));
-        const toCpu = (value) => value;
+        const toMemory = (value) => value === null ? null : value / scale;
 
-        const chart = (key, unit, convert) => ({
+        const chart = (key, unit, convert = (value) => value) => ({
             unit,
             total: (data[key] || []).map(convert),
             layers: supervisors.map((supervisor) => ({
@@ -194,7 +202,7 @@
             labels,
             hasData: (data.memory || []).some((value) => value !== null),
             memory: chart('memory', useGigabytes ? 'GB' : 'MB', toMemory),
-            cpu: chart('cpu', 'cores', toCpu),
+            cpu: chart('cpu', 'cores'),
         };
     }
 
@@ -360,10 +368,21 @@
         tooltip.className = 'hws-tooltip';
         tooltip.hidden = true;
 
+        // The bucket under the cursor, so the tooltip is only rebuilt when the
+        // cursor crosses into another one rather than on every mouse move.
+        let hovered = null;
+
         chart.addEventListener('mousemove', (event) => {
             const bounds = chart.getBoundingClientRect();
             const offset = event.clientX - bounds.left;
             const i = Math.min(labels.length - 1, Math.max(0, Math.round(((offset - PADDING.left) / plotWidth) * count)));
+
+            if (i === hovered) {
+                return;
+            }
+
+            hovered = i;
+
             const total = data.total[i];
 
             cursor.setAttribute('x1', x(i));
@@ -384,15 +403,15 @@
 
             // Listed top band first, the same order the eye meets them in.
             const rows = total === null ? '' : data.layers.slice().reverse().map((layer) => '<div class="hws-row">'
-                + '<span class="hws-swatch" style="background:' + layer.color + '"></span>'
+                + swatch(layer.color)
                 + '<span class="hws-name">' + escapeHtml(layer.name) + '</span>'
-                + '<span class="hws-value">' + escapeHtml(round(layer.values[i], 2) + ' ' + data.unit) + '</span>'
+                + '<span class="hws-value">' + escapeHtml(formatValue(layer.values[i], data.unit)) + '</span>'
                 + '</div>').join('');
 
             tooltip.innerHTML = '<div class="text-muted">' + escapeHtml(formatDateTime(labels[i])) + '</div>'
                 + rows
                 + '<div class="hws-row hws-total"><span class="hws-name">Total</span><strong class="hws-value">'
-                + escapeHtml(total === null ? 'Not sampled' : round(total, 2) + ' ' + data.unit) + '</strong></div>';
+                + escapeHtml(total === null ? 'Not sampled' : formatValue(total, data.unit)) + '</strong></div>';
             tooltip.hidden = false;
 
             const left = Math.min(x(i) + 12, width - tooltip.offsetWidth - 4);
@@ -400,6 +419,7 @@
         });
 
         chart.addEventListener('mouseleave', () => {
+            hovered = null;
             cursor.setAttribute('visibility', 'hidden');
             dots.forEach((dot) => dot.setAttribute('visibility', 'hidden'));
             tooltip.hidden = true;
@@ -419,9 +439,9 @@
             const current = latest(layer.values);
 
             return '<span class="hws-legend-item">'
-                + '<span class="hws-swatch" style="background:' + layer.color + '"></span>'
+                + swatch(layer.color)
                 + escapeHtml(layer.name)
-                + (current === null ? '' : '<span class="hws-legend-value text-muted">' + escapeHtml(round(current, 2) + ' ' + data.unit) + '</span>')
+                + (current === null ? '' : '<span class="hws-legend-value text-muted">' + escapeHtml(formatValue(current, data.unit)) + '</span>')
                 + '</span>';
         }).join('');
     }
@@ -465,9 +485,8 @@
             return;
         }
 
-        if (!mounted) {
+        if (!root.firstChild) {
             root.innerHTML = shell();
-            mounted = true;
         }
 
         const notice = root.querySelector('[data-hws-notice]');
@@ -484,7 +503,7 @@
             const chart = data[key];
             const current = latest(chart.total);
 
-            now.textContent = current === null ? '' : 'Now: ' + round(current, 2) + ' ' + chart.unit;
+            now.textContent = current === null ? '' : 'Now: ' + formatValue(current, chart.unit);
 
             if (!data.hasData) {
                 container.innerHTML = '<p class="text-center text-muted m-0 p-3">'
@@ -527,7 +546,6 @@
 
         if (!onPage()) {
             stop();
-            mounted = false;
             root.innerHTML = '';
 
             return;
@@ -568,6 +586,9 @@
 
     darkSheet && new MutationObserver(render).observe(darkSheet, {attributes: true, attributeFilter: ['media']});
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+
+    // A hidden tab stops polling, and catches up as soon as it is shown again.
+    document.addEventListener('visibilitychange', () => document.hidden ? stop() : sync());
 
     window.addEventListener('popstate', sync);
     window.addEventListener('hws:navigated', sync);

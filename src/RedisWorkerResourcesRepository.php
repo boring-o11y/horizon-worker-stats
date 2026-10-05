@@ -9,6 +9,7 @@ use Illuminate\Contracts\Redis\Factory as RedisFactory;
 use Illuminate\Redis\Connections\PhpRedisClusterConnection;
 use Illuminate\Redis\Connections\PhpRedisConnection;
 use Illuminate\Redis\Connections\PredisConnection;
+use Illuminate\Support\Str;
 
 class RedisWorkerResourcesRepository implements WorkerResourcesRepository
 {
@@ -42,9 +43,9 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
     {
         $this->redis = $redis;
 
-        $this->intervalSeconds = max(1, (int) config('horizon-worker-stats.interval', 15)) * 60;
+        $this->intervalSeconds = max(1, (int) config('horizon-worker-stats.interval')) * 60;
         $this->bucketCount = max(1, (int) ceil(
-            max(1, (int) config('horizon-worker-stats.retention', 24)) * 3600 / $this->intervalSeconds
+            max(1, (int) config('horizon-worker-stats.retention')) * 3600 / $this->intervalSeconds
         ));
     }
 
@@ -104,17 +105,13 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
             }
         });
 
-        $memory = [];
-        $cpu = [];
+        $total = ['memory' => [], 'cpu' => []];
         $groups = [];
 
         foreach ($buckets as $i => $bucket) {
             $supervisors = $this->supervisors((array) ($raw[$i] ?? []));
 
             if (empty($supervisors)) {
-                $memory[] = null;
-                $cpu[] = null;
-
                 continue;
             }
 
@@ -122,40 +119,58 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
             $latest = max(array_column($supervisors, 'until'));
             $window = max(1, $latest - $earliest);
 
-            $bytes = 0.0;
-            $cores = 0.0;
-
             foreach ($supervisors as $name => $supervisor) {
                 // Each supervisor is averaged over the seconds it sampled, then
                 // weighted by how much of the bucket it was running for. A gap
                 // between its samples is a stretch nobody measured, not a
                 // stretch its workers used nothing.
                 $share = $this->presence($supervisor, $latest) / $window / $supervisor['covered'];
-
-                $bytes += $supervisor['memory'] * $share;
-                $cores += $supervisor['cpu'] * $share;
-
                 $group = $this->group($name);
-                $groups[$group][$i]['memory'] = ($groups[$group][$i]['memory'] ?? 0.0) + $supervisor['memory'] * $share;
-                $groups[$group][$i]['cpu'] = ($groups[$group][$i]['cpu'] ?? 0.0) + $supervisor['cpu'] * $share;
-            }
 
-            $memory[] = (int) round($bytes);
-            $cpu[] = round($cores, 3);
+                foreach (['memory', 'cpu'] as $metric) {
+                    $used = $supervisor[$metric] * $share;
+
+                    $total[$metric][$i] = ($total[$metric][$i] ?? 0.0) + $used;
+                    $groups[$group][$metric][$i] = ($groups[$group][$metric][$i] ?? 0.0) + $used;
+                }
+            }
         }
 
         ksort($groups);
 
+        $bytes = fn ($value) => (int) round($value);
+        $cores = fn ($value) => round($value, 3);
+
         return [
             'labels' => $buckets,
-            'memory' => $memory,
-            'cpu' => $cpu,
+            'memory' => $this->series($buckets, $total['memory'], $total['memory'], $bytes),
+            'cpu' => $this->series($buckets, $total['cpu'], $total['cpu'], $cores),
             'supervisors' => array_map(fn ($name) => [
                 'name' => (string) $name,
-                'memory' => $this->groupSeries($groups[$name], $memory, 'memory', fn ($value) => (int) round($value)),
-                'cpu' => $this->groupSeries($groups[$name], $cpu, 'cpu', fn ($value) => round($value, 3)),
+                'memory' => $this->series($buckets, $groups[$name]['memory'], $total['memory'], $bytes),
+                'cpu' => $this->series($buckets, $groups[$name]['cpu'], $total['cpu'], $cores),
             ], array_keys($groups)),
         ];
+    }
+
+    /**
+     * Line values up with every bucket in the window.
+     *
+     * A bucket nothing sampled stays null. One that other supervisors sampled
+     * but this one did not is zero: it had no workers running there, and the
+     * breakdown still adds up to the total.
+     *
+     * @param  array<int, int>  $buckets
+     * @param  array<int, float>  $values
+     * @param  array<int, float>  $sampled
+     * @return array<int, int|float|null>
+     */
+    protected function series(array $buckets, array $values, array $sampled, callable $round)
+    {
+        return array_map(
+            fn ($i) => isset($sampled[$i]) ? $round($values[$i] ?? 0.0) : null,
+            array_keys($buckets)
+        );
     }
 
     /**
@@ -171,32 +186,7 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
      */
     protected function group($supervisor)
     {
-        return ($separator = strrpos($supervisor, ':')) !== false
-            ? substr($supervisor, $separator + 1)
-            : $supervisor;
-    }
-
-    /**
-     * Line one supervisor's values up with the buckets of the total.
-     *
-     * A bucket nothing sampled stays null. One that other supervisors sampled
-     * but this one did not is zero: it had no workers running there, and the
-     * breakdown still adds up to the total.
-     *
-     * @param  array<int, array{memory: float, cpu: float}>  $values
-     * @param  array<int, int|float|null>  $total
-     * @param  string  $metric
-     * @return array<int, int|float|null>
-     */
-    protected function groupSeries(array $values, array $total, $metric, callable $round)
-    {
-        $series = [];
-
-        foreach ($total as $i => $value) {
-            $series[] = $value === null ? null : $round($values[$i][$metric] ?? 0.0);
-        }
-
-        return $series;
+        return Str::afterLast($supervisor, ':');
     }
 
     /**
@@ -210,8 +200,8 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
         $fields = [];
 
         foreach ($hash as $field => $value) {
-            if (($separator = strrpos($field, '|')) !== false) {
-                $fields[substr($field, 0, $separator)][substr($field, $separator + 1)] = $value;
+            if (str_contains($field, '|')) {
+                $fields[Str::beforeLast($field, '|')][Str::afterLast($field, '|')] = $value;
             }
         }
 
@@ -343,6 +333,9 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
 
     /**
      * Execute commands in a pipeline, falling back to a transaction.
+     *
+     * Mirrors Horizon's UsesClusterAwarePipeline, which only ships from
+     * Horizon 5.48 while this package supports releases before it.
      *
      * phpredis cannot pipeline across a cluster. Every key here carries
      * Horizon's hash-tagged prefix, so a transaction stays on one node.

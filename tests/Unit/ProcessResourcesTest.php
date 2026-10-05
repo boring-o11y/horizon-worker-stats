@@ -2,8 +2,8 @@
 
 namespace BoringO11y\HorizonWorkerStats\Tests\Unit;
 
-use BoringO11y\HorizonWorkerStats\Exec;
 use BoringO11y\HorizonWorkerStats\ProcessResources;
+use Laravel\Horizon\Exec;
 use PHPUnit\Framework\TestCase;
 
 class ProcessResourcesTest extends TestCase

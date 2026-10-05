@@ -157,12 +157,10 @@ class LayoutDecorator
 
         return [
             'pageId' => self::PAGE_ID,
-            'pageUrl' => $this->pageUrl(),
             'pagePath' => (string) parse_url($this->pageUrl(), PHP_URL_PATH),
             'indexUrl' => $base.'/api/worker-stats',
-            'label' => $this->label(),
-            'pollInterval' => max(5000, (int) $this->config->get('horizon-worker-stats.poll_interval', 60000)),
-            'retention' => max(1, (int) $this->config->get('horizon-worker-stats.retention', 24)),
+            'pollInterval' => max(5000, (int) $this->config->get('horizon-worker-stats.poll_interval')),
+            'retention' => max(1, (int) $this->config->get('horizon-worker-stats.retention')),
         ];
     }
 
@@ -171,7 +169,7 @@ class LayoutDecorator
      */
     protected function pageUrl(): string
     {
-        return $this->dashboardUrl().'/'.trim((string) $this->config->get('horizon-worker-stats.path', 'worker-stats'), '/');
+        return $this->dashboardUrl().'/'.trim((string) $this->config->get('horizon-worker-stats.path'), '/');
     }
 
     /**
@@ -190,7 +188,7 @@ class LayoutDecorator
 
     protected function label(): string
     {
-        return (string) $this->config->get('horizon-worker-stats.label', 'Worker Stats');
+        return (string) $this->config->get('horizon-worker-stats.label');
     }
 
     /**

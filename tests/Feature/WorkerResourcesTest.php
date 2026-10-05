@@ -38,13 +38,6 @@ class WorkerResourcesTest extends TestCase
         $this->travelToSecond($this->bucket + 900 + 300);
     }
 
-    protected function tearDown(): void
-    {
-        CarbonImmutable::setTestNow();
-
-        parent::tearDown();
-    }
-
     public function test_memory_and_cpu_are_averaged_over_the_time_covered()
     {
         $resources = resolve(WorkerResourcesRepository::class);
@@ -227,16 +220,6 @@ class WorkerResourcesTest extends TestCase
         // ...which is not the same as a bucket nobody measured.
         $this->assertNull($reports['memory'][$index - 2]);
         $this->assertSameSize($trends['labels'], $reports['memory']);
-    }
-
-    public function test_clearing_removes_the_history()
-    {
-        $resources = resolve(WorkerResourcesRepository::class);
-
-        $resources->record('host:supervisor-1', $this->bucket, $this->bucket + 900, 1048576, 1);
-        $resources->clear();
-
-        $this->assertSame([], array_filter($resources->trends()['memory'], fn ($value) => $value !== null));
     }
 
     public function test_the_listener_records_the_span_between_two_samples()

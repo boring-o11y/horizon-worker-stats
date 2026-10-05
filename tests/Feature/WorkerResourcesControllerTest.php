@@ -12,13 +12,6 @@ use Laravel\Sentinel\Http\Middleware\SentinelMiddleware;
 
 class WorkerResourcesControllerTest extends TestCase
 {
-    protected function tearDown(): void
-    {
-        CarbonImmutable::setTestNow();
-
-        parent::tearDown();
-    }
-
     public function test_worker_memory_and_cpu_are_returned_on_the_bucket_timeline()
     {
         // History is bucketed on the wall clock, so the write and the read are

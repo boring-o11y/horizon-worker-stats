@@ -2,6 +2,8 @@
 
 namespace BoringO11y\HorizonWorkerStats;
 
+use Laravel\Horizon\Exec;
+
 class ProcessResources
 {
     /**

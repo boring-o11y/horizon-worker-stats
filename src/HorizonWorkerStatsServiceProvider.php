@@ -159,8 +159,14 @@ class HorizonWorkerStatsServiceProvider extends ServiceProvider
      */
     protected function registerViewOverride($view)
     {
-        /** @var FileViewFinder $finder */
         $finder = $view->getFinder();
+
+        // Namespace hints are a FileViewFinder feature, not part of the
+        // finder contract, so a custom finder is left alone.
+        if (! $finder instanceof FileViewFinder) {
+            return;
+        }
+
         $hints = $finder->getHints();
 
         if (! isset($hints['horizon']) || isset($hints[self::ORIGINAL_NAMESPACE])) {
@@ -176,6 +182,6 @@ class HorizonWorkerStatsServiceProvider extends ServiceProvider
      */
     protected function enabled()
     {
-        return (bool) config('horizon-worker-stats.enabled', true);
+        return (bool) config('horizon-worker-stats.enabled');
     }
 }
