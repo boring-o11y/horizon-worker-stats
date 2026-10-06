@@ -182,6 +182,6 @@ class HorizonWorkerStatsServiceProvider extends ServiceProvider
      */
     protected function enabled()
     {
-        return (bool) config('horizon-worker-stats.enabled');
+        return (bool) config('horizon-worker-stats.enabled', Defaults::get('enabled'));
     }
 }

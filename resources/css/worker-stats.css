@@ -39,6 +39,7 @@
     padding: 6px 10px;
     font-size: 12px;
     white-space: nowrap;
+    z-index: 1;
     pointer-events: none;
     background: var(--bs-body-bg, #fff);
     border: 1px solid var(--bs-border-color, #dee2e6);

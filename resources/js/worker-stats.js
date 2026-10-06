@@ -23,12 +23,21 @@
     /**
      * One colour per supervisor, in a fixed order validated for colour-blind
      * separation between neighbours, with its own steps for the dark theme.
-     * Supervisors past the last slot fold into "Other" rather than reusing one.
+     * Supervisors past the last slot fold into "Other", which has a neutral
+     * colour of its own rather than taking one of theirs.
      */
     const PALETTE = {
         light: ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#4a3aa7', '#e34948'],
         dark: ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#008300', '#9085e9', '#e66767'],
     };
+
+    const OTHER = {light: '#8a8f98', dark: '#7d838c'};
+
+    /**
+     * How much more than the smallest shown supervisor a folded one has to use
+     * to take its slot, so two of similar size do not trade places every poll.
+     */
+    const MARGIN = 1.1;
 
     const state = {
         data: null,
@@ -36,6 +45,7 @@
     };
 
     let pollTimer = null;
+    let request = null;
 
     /* ------------------------------------------------------------- helpers */
 
@@ -92,10 +102,27 @@
 
     /* ------------------------------------------------------------ requests */
 
+    /**
+     * Fetch the latest stats, unless the previous poll is still out.
+     *
+     * A request is given up on after one poll interval, so a slow one neither
+     * piles up behind the next nor lands after it with older numbers.
+     */
     function load() {
-        return fetch(settings.indexUrl, {
+        if (request) {
+            return;
+        }
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), settings.pollInterval);
+        const current = () => request === controller;
+
+        request = controller;
+
+        fetch(settings.indexUrl, {
             credentials: 'same-origin',
             headers: {'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+            signal: controller.signal,
         })
             .then((response) => {
                 if (!response.ok) {
@@ -105,13 +132,26 @@
                 return response.json();
             })
             .then((data) => {
-                state.data = data;
-                state.error = null;
+                if (current()) {
+                    state.data = data;
+                    state.error = null;
+                }
             })
             .catch((error) => {
-                state.error = error.message || 'Could not load worker stats.';
+                if (current()) {
+                    state.error = error.name === 'AbortError'
+                        ? 'Loading worker stats timed out.'
+                        : error.message || 'Could not load worker stats.';
+                }
             })
-            .finally(render);
+            .finally(() => {
+                clearTimeout(timeout);
+
+                if (current()) {
+                    request = null;
+                    render();
+                }
+            });
     }
 
     /* ---------------------------------------------------------- the series */
@@ -130,20 +170,23 @@
     }
 
     /**
+     * The palette slot each supervisor shown has, by name, kept between polls.
+     */
+    const slots = new Map();
+
+    /**
      * Give each supervisor its colour, folding any past the last one into "Other".
      *
-     * When there are too many, the ones using the least across the window are
-     * folded, so the band that matters is never the one hidden. Colours go by
-     * name among the supervisors shown, so they hold between refreshes for as
-     * long as the same supervisors are in the window.
+     * A supervisor keeps its slot, and so its colour, for as long as it stays
+     * in the window. New ones take the free slots, in name order. When there
+     * are too many, the ones using the least across the window are folded: a
+     * folded one takes the smallest shown one's slot once it uses a margin
+     * more, or straight away when it uses more than any shown one, so the
+     * band that matters is never the one hidden.
      */
     function layers(supervisors) {
-        const colors = PALETTE[dark() ? 'dark' : 'light'];
-        const paint = (list) => list.map((supervisor, i) => Object.assign({color: colors[i]}, supervisor));
-
-        if (supervisors.length <= colors.length) {
-            return paint(supervisors);
-        }
+        const theme = dark() ? 'dark' : 'light';
+        const colors = PALETTE[theme];
 
         const total = (supervisor, key) => supervisor[key].reduce((sum, value) => sum + (value || 0), 0);
         const fleet = (key) => supervisors.reduce((sum, supervisor) => sum + total(supervisor, key), 0) || 1;
@@ -154,17 +197,50 @@
             total(supervisor, 'memory') / memory + total(supervisor, 'cpu') / cpu,
         ]));
 
-        const ranked = supervisors.slice().sort((a, b) => shares.get(b.name) - shares.get(a.name));
-        const shown = new Set(ranked.slice(0, colors.length - 1).map((supervisor) => supervisor.name));
-        const kept = supervisors.filter((supervisor) => shown.has(supervisor.name));
-        const rest = supervisors.filter((supervisor) => !shown.has(supervisor.name));
+        Array.from(slots.keys()).forEach((name) => shares.has(name) || slots.delete(name));
+
+        const waiting = supervisors.map((supervisor) => supervisor.name).filter((name) => !slots.has(name));
+
+        if (supervisors.length > colors.length) {
+            waiting.sort((a, b) => shares.get(b) - shares.get(a));
+        }
+
+        waiting.forEach((name) => {
+            const taken = new Set(slots.values());
+            const free = colors.findIndex((color, i) => !taken.has(i));
+
+            if (free !== -1) {
+                slots.set(name, free);
+
+                return;
+            }
+
+            const shown = Array.from(slots.keys()).map((other) => shares.get(other));
+            const smallest = Array.from(slots.keys()).reduce((min, other) => shares.get(other) < shares.get(min) ? other : min);
+            const share = shares.get(name);
+
+            if (share > MARGIN * shares.get(smallest) || share > Math.max(...shown)) {
+                slots.set(name, slots.get(smallest));
+                slots.delete(smallest);
+            }
+        });
+
+        const kept = supervisors
+            .filter((supervisor) => slots.has(supervisor.name))
+            .map((supervisor) => Object.assign({color: colors[slots.get(supervisor.name)]}, supervisor));
+        const rest = supervisors.filter((supervisor) => !slots.has(supervisor.name));
+
+        if (!rest.length) {
+            return kept;
+        }
+
         const sum = (key) => rest[0][key].map((value, i) => value === null
             ? null
             : rest.reduce((total, supervisor) => total + (supervisor[key][i] || 0), 0));
 
-        return paint(kept).concat([{
-            name: 'Other (' + rest.length + ')',
-            color: colors[colors.length - 1],
+        return kept.concat([{
+            name: rest.length === 1 ? rest[0].name : 'Other (' + rest.length + ')',
+            color: OTHER[theme],
             memory: sum('memory'),
             cpu: sum('cpu'),
         }]);
@@ -184,8 +260,6 @@
 
         const useGigabytes = Math.max(0, ...(data.memory || []).filter((value) => value !== null)) / BYTES_IN_MB >= 1024;
         const scale = BYTES_IN_MB * (useGigabytes ? 1024 : 1);
-        // Kept unrounded, so the bands stack to exactly the total. Only the
-        // numbers shown as text are rounded.
         const toMemory = (value) => value === null ? null : value / scale;
 
         const chart = (key, unit, convert = (value) => value) => ({
@@ -414,7 +488,11 @@
                 + escapeHtml(total === null ? 'Not sampled' : formatValue(total, data.unit)) + '</strong></div>';
             tooltip.hidden = false;
 
-            const left = Math.min(x(i) + 12, width - tooltip.offsetWidth - 4);
+            // Beside the cursor, on whichever side it fits, so it never covers
+            // the bucket it describes. With many supervisors it is taller than
+            // the plot, and hangs over the legend rather than over the bands.
+            const right = x(i) + 12;
+            const left = right + tooltip.offsetWidth + 4 > width ? x(i) - 12 - tooltip.offsetWidth : right;
             tooltip.style.left = Math.max(4, left) + 'px';
         });
 
@@ -529,6 +607,10 @@
     function stop() {
         clearInterval(pollTimer);
         pollTimer = null;
+
+        // One still out when the page is left, or the tab hidden, is dropped.
+        request && request.abort();
+        request = null;
     }
 
     function highlight() {
@@ -551,7 +633,9 @@
             return;
         }
 
-        if (pollTimer === null) {
+        // Navigation can happen while the tab is hidden, which must not start
+        // polling again; showing the tab does.
+        if (pollTimer === null && !document.hidden) {
             start();
         }
     }
@@ -581,11 +665,14 @@
     });
 
     // Redrawn in the other theme's colours when Horizon's toggle, or the
-    // system setting it follows, switches between light and dark.
+    // system setting it follows, switches between light and dark. Horizon
+    // rewrites its dark sheet's media for both, so that is all that is
+    // watched; the system setting only directly when there is no such sheet.
     const darkSheet = document.querySelector('style[data-scheme="dark"]');
 
-    darkSheet && new MutationObserver(render).observe(darkSheet, {attributes: true, attributeFilter: ['media']});
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
+    darkSheet
+        ? new MutationObserver(render).observe(darkSheet, {attributes: true, attributeFilter: ['media']})
+        : window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', render);
 
     // A hidden tab stops polling, and catches up as soon as it is shown again.
     document.addEventListener('visibilitychange', () => document.hidden ? stop() : sync());

@@ -5,6 +5,7 @@ namespace BoringO11y\HorizonWorkerStats;
 use Illuminate\Contracts\Config\Repository as Config;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Js;
+use Laravel\Horizon\Horizon;
 
 /**
  * Adds this package's page to Horizon's rendered dashboard.
@@ -109,10 +110,14 @@ class LayoutDecorator
         $css = $this->asset('css/worker-stats.css');
         $js = $this->asset('js/worker-stats.js');
 
+        // The same nonce Horizon puts on its own inline tags, so a nonce-based
+        // Content-Security-Policy that lets the dashboard run lets this run too.
+        $nonce = property_exists(Horizon::class, 'nonceAttribute') ? Horizon::$nonceAttribute : '';
+
         $assets = <<<HTML
 
-        <style>{$css}</style>
-        <script>
+        <style{$nonce}>{$css}</style>
+        <script{$nonce}>
             window.HorizonWorkerStats = {$settings};
             {$js}
         </script>
@@ -159,8 +164,8 @@ class LayoutDecorator
             'pageId' => self::PAGE_ID,
             'pagePath' => (string) parse_url($this->pageUrl(), PHP_URL_PATH),
             'indexUrl' => $base.'/api/worker-stats',
-            'pollInterval' => max(5000, (int) $this->config->get('horizon-worker-stats.poll_interval')),
-            'retention' => max(1, (int) $this->config->get('horizon-worker-stats.retention')),
+            'pollInterval' => max(5000, (int) $this->config->get('horizon-worker-stats.poll_interval', Defaults::get('poll_interval'))),
+            'retention' => max(1, (int) $this->config->get('horizon-worker-stats.retention', Defaults::get('retention'))),
         ];
     }
 
@@ -169,7 +174,7 @@ class LayoutDecorator
      */
     protected function pageUrl(): string
     {
-        return $this->dashboardUrl().'/'.trim((string) $this->config->get('horizon-worker-stats.path'), '/');
+        return $this->dashboardUrl().'/'.trim((string) $this->config->get('horizon-worker-stats.path', Defaults::get('path')), '/');
     }
 
     /**
@@ -188,7 +193,7 @@ class LayoutDecorator
 
     protected function label(): string
     {
-        return (string) $this->config->get('horizon-worker-stats.label');
+        return (string) $this->config->get('horizon-worker-stats.label', Defaults::get('label'));
     }
 
     /**

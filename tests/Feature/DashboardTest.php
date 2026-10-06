@@ -6,6 +6,7 @@ use BoringO11y\HorizonWorkerStats\LayoutDecorator;
 use BoringO11y\HorizonWorkerStats\Tests\TestCase;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\FileViewFinder;
+use Laravel\Horizon\Horizon;
 
 class DashboardTest extends TestCase
 {
@@ -28,6 +29,20 @@ class DashboardTest extends TestCase
         $this->assertStringContainsString('window.HorizonWorkerStats =', $html);
         $this->assertStringContainsString('function drawChart', $html);
         $this->assertStringContainsString('#hws-page .hws-chart', $html);
+    }
+
+    public function test_the_script_and_styles_carry_horizons_csp_nonce()
+    {
+        Horizon::cspNonce('abc123');
+
+        try {
+            $html = $this->get('horizon')->assertOk()->getContent();
+        } finally {
+            Horizon::$nonceAttribute = '';
+        }
+
+        $this->assertMatchesRegularExpression('/<style nonce="abc123">[^<]*#hws-page/', $html);
+        $this->assertMatchesRegularExpression('/<script nonce="abc123">\s*window\.HorizonWorkerStats =/', $html);
     }
 
     public function test_the_mount_sits_after_horizons_router_outlet()

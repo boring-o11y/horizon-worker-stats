@@ -43,9 +43,9 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
     {
         $this->redis = $redis;
 
-        $this->intervalSeconds = max(1, (int) config('horizon-worker-stats.interval')) * 60;
+        $this->intervalSeconds = max(1, (int) config('horizon-worker-stats.interval', Defaults::get('interval'))) * 60;
         $this->bucketCount = max(1, (int) ceil(
-            max(1, (int) config('horizon-worker-stats.retention')) * 3600 / $this->intervalSeconds
+            max(1, (int) config('horizon-worker-stats.retention', Defaults::get('retention'))) * 3600 / $this->intervalSeconds
         ));
     }
 
@@ -105,7 +105,7 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
             }
         });
 
-        $total = ['memory' => [], 'cpu' => []];
+        $sampled = [];
         $groups = [];
 
         foreach ($buckets as $i => $bucket) {
@@ -118,6 +118,7 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
             $earliest = min(array_column($supervisors, 'from'));
             $latest = max(array_column($supervisors, 'until'));
             $window = max(1, $latest - $earliest);
+            $sampled[$i] = 0.0;
 
             foreach ($supervisors as $name => $supervisor) {
                 // Each supervisor is averaged over the seconds it sampled, then
@@ -128,10 +129,7 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
                 $group = $this->group($name);
 
                 foreach (['memory', 'cpu'] as $metric) {
-                    $used = $supervisor[$metric] * $share;
-
-                    $total[$metric][$i] = ($total[$metric][$i] ?? 0.0) + $used;
-                    $groups[$group][$metric][$i] = ($groups[$group][$metric][$i] ?? 0.0) + $used;
+                    $groups[$group][$metric][$i] = ($groups[$group][$metric][$i] ?? 0.0) + $supervisor[$metric] * $share;
                 }
             }
         }
@@ -141,15 +139,26 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
         $bytes = fn ($value) => (int) round($value);
         $cores = fn ($value) => round($value, 3);
 
+        $supervisors = array_map(fn ($name) => [
+            'name' => (string) $name,
+            'memory' => $this->series($buckets, $groups[$name]['memory'], $sampled, $bytes),
+            'cpu' => $this->series($buckets, $groups[$name]['cpu'], $sampled, $cores),
+        ], array_keys($groups));
+
+        // The totals are added up from the rounded breakdown rather than
+        // rounded on their own, so the breakdown adds up to them exactly.
+        $sum = fn ($metric, $round) => array_map(
+            fn ($i) => isset($sampled[$i])
+                ? $round(array_sum(array_map(fn ($supervisor) => $supervisor[$metric][$i], $supervisors)))
+                : null,
+            array_keys($buckets)
+        );
+
         return [
             'labels' => $buckets,
-            'memory' => $this->series($buckets, $total['memory'], $total['memory'], $bytes),
-            'cpu' => $this->series($buckets, $total['cpu'], $total['cpu'], $cores),
-            'supervisors' => array_map(fn ($name) => [
-                'name' => (string) $name,
-                'memory' => $this->series($buckets, $groups[$name]['memory'], $total['memory'], $bytes),
-                'cpu' => $this->series($buckets, $groups[$name]['cpu'], $total['cpu'], $cores),
-            ], array_keys($groups)),
+            'memory' => $sum('memory', $bytes),
+            'cpu' => $sum('cpu', $cores),
+            'supervisors' => $supervisors,
         ];
     }
 
@@ -179,13 +188,22 @@ class RedisWorkerResourcesRepository implements WorkerResourcesRepository
      * Horizon names a supervisor after its master, "{host}-{random}:{name}",
      * and the master's part changes every time Horizon starts. Only the name
      * from the configuration stays put, so that is what the history is kept by.
-     * It is taken after the last colon, as a custom master name may hold one.
+     *
+     * The master's part always ends in the four-character token Horizon adds
+     * to it, so the name is whatever follows the first "-{token}:". That holds
+     * when either part has a colon of its own: a custom master name such as
+     * "app:prod", or a supervisor configured as "queue:emails". A name not in
+     * that shape is taken after its last colon.
      *
      * @param  string  $supervisor
      * @return string
      */
     protected function group($supervisor)
     {
+        if (preg_match('/^.*?-[A-Za-z0-9]{4}:(.+)$/s', $supervisor, $matches)) {
+            return $matches[1];
+        }
+
         return Str::afterLast($supervisor, ':');
     }
 

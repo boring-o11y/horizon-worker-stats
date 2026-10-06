@@ -201,6 +201,16 @@ class WorkerResourcesTest extends TestCase
         $this->assertSame(['emails'], array_column(resolve(WorkerResourcesRepository::class)->trends()['supervisors'], 'name'));
     }
 
+    public function test_a_supervisor_name_holding_a_colon_is_kept_whole()
+    {
+        $resources = resolve(WorkerResourcesRepository::class);
+
+        $resources->record('host-abcd:queue:emails', $this->bucket, $this->bucket + 900, 100 * 1048576, 900);
+        $resources->record('host-abcd:reports:emails', $this->bucket, $this->bucket + 900, 100 * 1048576, 900);
+
+        $this->assertSame(['queue:emails', 'reports:emails'], array_column($resources->trends()['supervisors'], 'name'));
+    }
+
     public function test_a_supervisor_missing_from_a_sampled_bucket_is_zero_rather_than_null()
     {
         $resources = resolve(WorkerResourcesRepository::class);
