@@ -88,7 +88,7 @@ The data endpoint is `GET {horizon.path}/api/worker-stats`, behind the same midd
 
 ## Compatibility
 
-PHP 8.1+, Laravel 10–13, Horizon 5.24+. Both `phpredis` and `predis` are supported and the suite runs against each.
+PHP 8.4+, Laravel 10–13, Horizon 5.24+. Both `phpredis` and `predis` are supported and the suite runs against each.
 
 ## Testing
 
