@@ -2,6 +2,7 @@
     "name": "boring-o11y/horizon-worker-stats",
     "description": "Worker memory and CPU charts for the Laravel Horizon dashboard: what your whole worker fleet is using, over the last day.",
     "keywords": ["laravel", "horizon", "queue", "redis", "workers", "memory", "cpu"],
+    "homepage": "https://boring-observability.dev/open-source/horizon-worker-stats",
     "license": "MIT",
     "support": {
         "issues": "https://github.com/boring-o11y/horizon-worker-stats/issues",
